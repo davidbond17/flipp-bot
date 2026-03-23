@@ -1,0 +1,21 @@
+{
+  "postal_code": "M5V2H1",
+  "locale": "en-ca",
+  "preferred_stores": [
+    "No Frills",
+    "Loblaws",
+    "Walmart",
+    "FreshCo",
+    "Food Basics",
+    "Real Canadian Superstore"
+  ],
+  "watch_items": [
+    "chicken breast",
+    "ground beef",
+    "bananas",
+    "avocado",
+    "strawberries",
+    "blueberries"
+  ],
+  "max_results_per_query": 25
+}
