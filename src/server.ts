@@ -3,7 +3,8 @@ import { z } from "zod/v4";
 import { FlippClient } from "./flipp-client.js";
 import { loadConfig } from "./config.js";
 import type { DealResult, FlyerResult } from "./types.js";
-import { formatAllPolicies, getPriceMatchTips } from "./price-match.js";
+import { formatAllPolicies, getPriceMatchTips, getPriceMatchPolicy } from "./price-match.js";
+import { parsePrice } from "./flipp-client.js";
 
 function formatDeals(deals: DealResult[]): string {
   if (deals.length === 0) return "No deals found matching your criteria.";
@@ -229,6 +230,106 @@ export function createServer(): McpServer {
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `Error fetching price match info: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: build_shopping_list
+  server.tool(
+    "build_shopping_list",
+    "Takes a list of items you need, finds the cheapest price for each across stores, and groups results by store to minimize trips. Factors in price matching so you can get everything at fewer stops.",
+    {
+      items: z
+        .array(z.string())
+        .describe("List of items to shop for (e.g. ['chicken breast', 'bananas', 'milk'])"),
+    },
+    async ({ items }) => {
+      try {
+        // Find best price for each item
+        const itemResults = await Promise.all(
+          items.map(async (item) => {
+            const deals = await client.comparePrices(item);
+            return { item, deals };
+          })
+        );
+
+        // For each item, pick the best deal
+        interface BestDeal {
+          item: string;
+          deal: DealResult;
+          effectivePrice: number | null;
+        }
+        const bestDeals: BestDeal[] = [];
+        const notFound: string[] = [];
+
+        for (const { item, deals } of itemResults) {
+          if (deals.length === 0) {
+            notFound.push(item);
+            continue;
+          }
+          bestDeals.push({
+            item,
+            deal: deals[0],
+            effectivePrice: parsePrice(deals[0].price),
+          });
+        }
+
+        // Group by store
+        const storeGroups = new Map<string, BestDeal[]>();
+        for (const bd of bestDeals) {
+          const store = bd.deal.store;
+          if (!storeGroups.has(store)) storeGroups.set(store, []);
+          storeGroups.get(store)!.push(bd);
+        }
+
+        // Now optimize: if a store price-matches, we can consolidate
+        // For each item, check if the store with most items will match the cheapest price
+        const storesByItemCount = [...storeGroups.entries()].sort(
+          (a, b) => b[1].length - a[1].length
+        );
+
+        // The store you're already visiting with the most items
+        const primaryStore = storesByItemCount[0]?.[0];
+        const primaryPolicy = primaryStore ? getPriceMatchPolicy(primaryStore) : undefined;
+
+        let output = "## Shopping List\n\n";
+
+        if (primaryPolicy?.matches_competitors && storeGroups.size > 1) {
+          // Consolidation possible
+          output += `> **Tip:** **${primaryStore}** price matches! You can get everything there by bringing competitor flyers.\n\n`;
+
+          output += `### All items at ${primaryStore} (with price matching)\n\n`;
+          for (const bd of bestDeals) {
+            const atPrimary = bd.deal.store === primaryStore;
+            let line = `- **${bd.item}**: ${bd.deal.item_name} — ${bd.deal.price}`;
+            if (!atPrimary) {
+              line += ` *(match ${bd.deal.store}'s flyer)*`;
+            }
+            output += line + "\n";
+          }
+        } else {
+          // No consolidation — group by store
+          for (const [store, deals] of storesByItemCount) {
+            output += `### ${store} (${deals.length} item${deals.length > 1 ? "s" : ""})\n\n`;
+            for (const bd of deals) {
+              output += `- **${bd.item}**: ${bd.deal.item_name} — ${bd.deal.price}\n`;
+            }
+            output += "\n";
+          }
+        }
+
+        if (notFound.length > 0) {
+          output += `\n### Not found this week\n${notFound.map((i) => `- ${i}`).join("\n")}\n`;
+        }
+
+        return {
+          content: [{ type: "text" as const, text: output.trim() }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: `Error building shopping list: ${error}` }],
           isError: true,
         };
       }
