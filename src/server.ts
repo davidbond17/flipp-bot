@@ -135,6 +135,68 @@ export function createServer(): McpServer {
     }
   );
 
+  // Tool: check_watch_list
+  server.tool(
+    "check_watch_list",
+    "Check your watch list items against current flyer deals. Shows which of your frequently bought items are on sale this week, with price match tips.",
+    {},
+    async () => {
+      try {
+        if (config.watch_items.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Your watch list is empty. Add items to `watch_items` in config.json to track them.",
+              },
+            ],
+          };
+        }
+
+        const sections: string[] = [];
+
+        // Search for each watch item in parallel
+        const results = await Promise.all(
+          config.watch_items.map(async (item) => {
+            const deals = await client.comparePrices(item);
+            return { item, deals };
+          })
+        );
+
+        for (const { item, deals } of results) {
+          if (deals.length === 0) {
+            sections.push(`### ${item}\nNo deals found this week.`);
+          } else {
+            const tips = getPriceMatchTips(deals);
+            const lines = deals
+              .slice(0, 5) // top 5 per item
+              .map((d) => {
+                let line = `- **${d.store}**: ${d.item_name}`;
+                if (d.price && d.price !== "See flyer") line += ` — ${d.price}`;
+                return line;
+              })
+              .join("\n");
+            sections.push(`### ${item}\n${lines}${tips}`);
+          }
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `## Watch List Deals\n\n${sections.join("\n\n")}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: `Error checking watch list: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   // Tool: get_price_match_info
   server.tool(
     "get_price_match_info",
