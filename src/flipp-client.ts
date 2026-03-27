@@ -144,6 +144,8 @@ export class FlippClient {
             store: flyer.store,
             item_name: item.name,
             price: item.price ?? "See flyer",
+            pre_price: item.pre_price,
+            savings: item.savings,
             valid_from: item.valid_from ?? flyer.valid_from,
             valid_to: item.valid_to ?? flyer.valid_to,
             description: item.description,
@@ -197,6 +199,8 @@ export class FlippClient {
           store: flyer.store,
           item_name: item.name,
           price: item.price ?? "See flyer",
+          pre_price: item.pre_price,
+          savings: item.savings,
           valid_from: item.valid_from ?? flyer.valid_from,
           valid_to: item.valid_to ?? flyer.valid_to,
           description: item.description,
@@ -230,7 +234,7 @@ export class FlippClient {
  * Try to extract a numeric price from a price string.
  * Handles formats like "$4.97", "4.97/lb", "$3.99", "2/$5", etc.
  */
-function parsePrice(price: string): number | null {
+export function parsePrice(price: string): number | null {
   if (!price || price === "See flyer") return null;
 
   // Handle "2/$5" style (return per-unit price)

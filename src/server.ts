@@ -12,6 +12,13 @@ function formatDeals(deals: DealResult[]): string {
     .map((d) => {
       let line = `- **${d.store}**: ${d.item_name}`;
       if (d.price && d.price !== "See flyer") line += ` — ${d.price}`;
+      if (d.pre_price) {
+        line += ` (was ${d.pre_price}`;
+        if (d.savings) {
+          line += `, save ${d.savings}`;
+        }
+        line += `)`;
+      }
       if (d.valid_from && d.valid_to) line += ` (valid ${d.valid_from} to ${d.valid_to})`;
       if (d.description) line += `\n  ${d.description}`;
       return line;

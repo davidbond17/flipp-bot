@@ -51,6 +51,8 @@ export interface DealResult {
   store: string;
   item_name: string;
   price: string;
+  pre_price?: string;
+  savings?: string;
   valid_from: string;
   valid_to: string;
   description?: string;
