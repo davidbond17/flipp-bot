@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { FlippClient } from "./flipp-client.js";
 import { loadConfig } from "./config.js";
 import type { DealResult, FlyerResult } from "./types.js";
+import { formatAllPolicies, getPriceMatchTips } from "./price-match.js";
 
 function formatDeals(deals: DealResult[]): string {
   if (deals.length === 0) return "No deals found matching your criteria.";
@@ -116,17 +117,49 @@ export function createServer(): McpServer {
     async ({ query }) => {
       try {
         const deals = await client.comparePrices(query);
+        const tips = getPriceMatchTips(deals);
         return {
           content: [
             {
               type: "text" as const,
-              text: `## Price Comparison: "${query}"\n\n${formatDeals(deals)}`,
+              text: `## Price Comparison: "${query}"\n\n${formatDeals(deals)}${tips}`,
             },
           ],
         };
       } catch (error) {
         return {
           content: [{ type: "text" as const, text: `Error comparing prices: ${error}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool: get_price_match_info
+  server.tool(
+    "get_price_match_info",
+    "Get price match policies for grocery stores. Shows which stores will match competitor flyer prices and their conditions.",
+    {
+      stores: z
+        .array(z.string())
+        .optional()
+        .describe("Specific stores to check. Omit to show all known policies."),
+    },
+    async ({ stores }) => {
+      try {
+        const storeFilter = stores ?? config.preferred_stores;
+        const text = formatAllPolicies(storeFilter);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `## Price Match Policies\n\n${text}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: `Error fetching price match info: ${error}` }],
           isError: true,
         };
       }
